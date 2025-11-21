@@ -1,0 +1,308 @@
+"""Conversation handlers for video generation flow."""
+import logging
+import os
+import asyncio
+from telegram import Update
+from telegram.ext import ContextTypes, ConversationHandler
+
+from bot.services.video_service import video_service
+from bot.utils.validators import (
+    validate_avatar_id,
+    validate_voice_id,
+    validate_text,
+    parse_single_message
+)
+from bot.config import Config
+
+logger = logging.getLogger(__name__)
+
+# Conversation states
+AVATAR_ID, VOICE_ID, TEXT_INPUT = range(3)
+
+
+async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Start video generation conversation."""
+    user_id = update.effective_user.id
+
+    # Check if user can generate video
+    can_generate, error_message = await video_service.can_user_generate_video(user_id)
+
+    if not can_generate:
+        await update.message.reply_text(f"❌ {error_message}")
+        return ConversationHandler.END
+
+    await update.message.reply_text(
+        "🎬 *Начнем создание видео!*\n\n"
+        "Вы можете отправить все данные одним сообщением в формате:\n"
+        "`avatar_id | voice_id | текст`\n\n"
+        "Или пошагово. Сначала отправьте *ID аватара*:",
+        parse_mode='Markdown'
+    )
+
+    return AVATAR_ID
+
+
+async def receive_avatar_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Receive avatar ID from user."""
+    message_text = update.message.text.strip()
+
+    # Check if user sent data in single-message format
+    parsed = parse_single_message(message_text)
+    if parsed:
+        return await process_single_message(update, context, parsed)
+
+    # Validate avatar ID
+    is_valid, error = validate_avatar_id(message_text)
+    if not is_valid:
+        await update.message.reply_text(f"❌ {error}\n\nПопробуйте снова:")
+        return AVATAR_ID
+
+    # Store avatar ID
+    context.user_data['avatar_id'] = message_text
+
+    await update.message.reply_text(
+        "✅ ID аватара принят!\n\n"
+        "Теперь отправьте *ID голоса*:",
+        parse_mode='Markdown'
+    )
+
+    return VOICE_ID
+
+
+async def receive_voice_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Receive voice ID from user."""
+    message_text = update.message.text.strip()
+
+    # Validate voice ID
+    is_valid, error = validate_voice_id(message_text)
+    if not is_valid:
+        await update.message.reply_text(f"❌ {error}\n\nПопробуйте снова:")
+        return VOICE_ID
+
+    # Store voice ID
+    context.user_data['voice_id'] = message_text
+
+    await update.message.reply_text(
+        "✅ ID голоса принят!\n\n"
+        "Теперь отправьте *текст для озвучки* (до 2000 символов):",
+        parse_mode='Markdown'
+    )
+
+    return TEXT_INPUT
+
+
+async def receive_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Receive text input from user."""
+    message_text = update.message.text.strip()
+
+    # Validate text
+    is_valid, error = validate_text(message_text)
+    if not is_valid:
+        await update.message.reply_text(f"❌ {error}\n\nПопробуйте снова:")
+        return TEXT_INPUT
+
+    # Store text
+    context.user_data['text'] = message_text
+
+    # Get all parameters
+    avatar_id = context.user_data['avatar_id']
+    voice_id = context.user_data['voice_id']
+
+    # Show confirmation
+    await update.message.reply_text(
+        "📋 *Параметры вашего видео:*\n\n"
+        f"🎭 Аватар: `{avatar_id}`\n"
+        f"🎤 Голос: `{voice_id}`\n"
+        f"📝 Текст: {message_text[:100]}{'...' if len(message_text) > 100 else ''}\n\n"
+        "⏳ Начинаю генерацию...",
+        parse_mode='Markdown'
+    )
+
+    # Start video generation
+    await generate_video(
+        update,
+        context,
+        avatar_id,
+        voice_id,
+        message_text
+    )
+
+    return ConversationHandler.END
+
+
+async def process_single_message(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    parsed_data: tuple
+):
+    """Process single-message format."""
+    avatar_id, voice_id, text = parsed_data
+
+    # Validate all inputs
+    is_valid, error = validate_avatar_id(avatar_id)
+    if not is_valid:
+        await update.message.reply_text(
+            f"❌ Ошибка в ID аватара: {error}\n\n"
+            "Используйте формат: `avatar_id | voice_id | текст`",
+            parse_mode='Markdown'
+        )
+        return AVATAR_ID
+
+    is_valid, error = validate_voice_id(voice_id)
+    if not is_valid:
+        await update.message.reply_text(
+            f"❌ Ошибка в ID голоса: {error}\n\n"
+            "Используйте формат: `avatar_id | voice_id | текст`",
+            parse_mode='Markdown'
+        )
+        return AVATAR_ID
+
+    is_valid, error = validate_text(text)
+    if not is_valid:
+        await update.message.reply_text(
+            f"❌ Ошибка в тексте: {error}\n\n"
+            "Используйте формат: `avatar_id | voice_id | текст`",
+            parse_mode='Markdown'
+        )
+        return AVATAR_ID
+
+    # Show confirmation
+    await update.message.reply_text(
+        "📋 *Параметры вашего видео:*\n\n"
+        f"🎭 Аватар: `{avatar_id}`\n"
+        f"🎤 Голос: `{voice_id}`\n"
+        f"📝 Текст: {text[:100]}{'...' if len(text) > 100 else ''}\n\n"
+        "⏳ Начинаю генерацию...",
+        parse_mode='Markdown'
+    )
+
+    # Start video generation
+    await generate_video(update, context, avatar_id, voice_id, text)
+
+    return ConversationHandler.END
+
+
+async def generate_video(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    avatar_id: str,
+    voice_id: str,
+    text: str
+):
+    """Generate video with given parameters."""
+    user = update.effective_user
+
+    try:
+        # Create video task
+        task_id = await video_service.create_video_task(
+            user.id,
+            user.username,
+            avatar_id,
+            voice_id,
+            text
+        )
+
+        logger.info(f"Starting video generation for task {task_id}")
+
+        # Notify user
+        status_message = await update.message.reply_text(
+            "⚙️ Генерация начата. Это может занять 2-5 минут...\n\n"
+            "Вы можете использовать /status для проверки прогресса."
+        )
+
+        # Generate video in background
+        success, error_msg = await video_service.generate_video(task_id)
+
+        if success:
+            # Download video
+            await context.bot.edit_message_text(
+                "📥 Видео готово! Скачиваю...",
+                chat_id=update.effective_chat.id,
+                message_id=status_message.message_id
+            )
+
+            video_path = await video_service.download_task_video(task_id)
+
+            if video_path and os.path.exists(video_path):
+                # Send video
+                await context.bot.edit_message_text(
+                    "📤 Отправляю видео...",
+                    chat_id=update.effective_chat.id,
+                    message_id=status_message.message_id
+                )
+
+                with open(video_path, 'rb') as video_file:
+                    await context.bot.send_video(
+                        chat_id=update.effective_chat.id,
+                        video=video_file,
+                        caption="✅ *Ваше видео готово!*\n\nХотите создать еще одно? Используйте /generate",
+                        parse_mode='Markdown'
+                    )
+
+                # Delete status message
+                await status_message.delete()
+
+                # Clean up video file
+                try:
+                    os.remove(video_path)
+                except Exception as e:
+                    logger.error(f"Error deleting video file: {e}")
+
+                logger.info(f"Video sent successfully for task {task_id}")
+            else:
+                await context.bot.edit_message_text(
+                    "❌ Не удалось скачать видео. Попробуйте позже.",
+                    chat_id=update.effective_chat.id,
+                    message_id=status_message.message_id
+                )
+        else:
+            await context.bot.edit_message_text(
+                f"❌ {error_msg}",
+                chat_id=update.effective_chat.id,
+                message_id=status_message.message_id
+            )
+
+    except Exception as e:
+        logger.error(f"Error in generate_video: {str(e)}")
+        await update.message.reply_text(
+            "❌ Произошла ошибка при генерации видео. Попробуйте позже."
+        )
+
+    finally:
+        # Clear user data
+        context.user_data.clear()
+
+
+async def cancel_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Cancel the conversation."""
+    context.user_data.clear()
+    await update.message.reply_text(
+        "❌ Генерация отменена. Используйте /generate для создания нового видео."
+    )
+    return ConversationHandler.END
+
+
+async def handle_regular_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle regular messages outside conversation."""
+    message_text = update.message.text.strip()
+
+    # Try to parse as single-message format
+    parsed = parse_single_message(message_text)
+
+    if parsed:
+        user_id = update.effective_user.id
+
+        # Check if user can generate video
+        can_generate, error_message = await video_service.can_user_generate_video(user_id)
+
+        if not can_generate:
+            await update.message.reply_text(f"❌ {error_message}")
+            return
+
+        # Process the message
+        await process_single_message(update, context, parsed)
+    else:
+        # Unknown message
+        await update.message.reply_text(
+            "ℹ️ Используйте /help для получения инструкций или /generate для создания видео."
+        )
