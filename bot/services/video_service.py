@@ -66,6 +66,42 @@ class VideoService:
 
         return task.task_id
 
+    async def create_video_task_with_photo(
+        self,
+        user_id: int,
+        username: Optional[str],
+        talking_photo_id: str,
+        voice_id: str,
+        input_text: str
+    ) -> int:
+        """
+        Create new video generation task with talking photo.
+
+        Args:
+            user_id: Telegram user ID
+            username: Telegram username
+            talking_photo_id: HeyGen talking photo ID
+            voice_id: HeyGen voice ID
+            input_text: Text for video
+
+        Returns:
+            Task ID
+        """
+        # Ensure user exists
+        await db.get_or_create_user(user_id, username)
+
+        # Create task (store talking_photo_id in avatar_id field with prefix)
+        # We'll use a prefix to distinguish talking photos from regular avatars
+        task = await db.create_video_task(
+            user_id,
+            f"talking_photo:{talking_photo_id}",  # Prefix to identify talking photos
+            voice_id,
+            input_text
+        )
+        logger.info(f"Created video task with talking photo {task.task_id} for user {user_id}")
+
+        return task.task_id
+
     async def generate_video(self, task_id: int) -> tuple[bool, Optional[str]]:
         """
         Generate video for a task.
@@ -81,12 +117,23 @@ class VideoService:
             return False, "Задача не найдена"
 
         try:
-            # Initiate video generation
-            video_id = await heygen_api.generate_video(
-                task.avatar_id,
-                task.voice_id,
-                task.input_text
-            )
+            # Check if this is a talking photo or regular avatar
+            if task.avatar_id.startswith("talking_photo:"):
+                # Extract talking_photo_id
+                talking_photo_id = task.avatar_id.replace("talking_photo:", "")
+                # Initiate video generation with talking photo
+                video_id = await heygen_api.generate_video(
+                    voice_id=task.voice_id,
+                    input_text=task.input_text,
+                    talking_photo_id=talking_photo_id
+                )
+            else:
+                # Initiate video generation with regular avatar
+                video_id = await heygen_api.generate_video(
+                    voice_id=task.voice_id,
+                    input_text=task.input_text,
+                    avatar_id=task.avatar_id
+                )
 
             if not video_id:
                 await db.update_task_status(

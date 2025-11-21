@@ -22,31 +22,45 @@ class HeyGenAPI:
 
     async def generate_video(
         self,
-        avatar_id: str,
         voice_id: str,
-        input_text: str
+        input_text: str,
+        avatar_id: str = None,
+        talking_photo_id: str = None
     ) -> Optional[str]:
         """
         Initiate video generation.
 
         Args:
-            avatar_id: HeyGen avatar ID
             voice_id: HeyGen voice ID
             input_text: Text to be spoken by avatar
+            avatar_id: HeyGen avatar ID (optional)
+            talking_photo_id: Talking photo ID (optional)
 
         Returns:
             video_id if successful, None otherwise
         """
         url = f"{self.base_url}/v2/video/generate"
 
+        # Build character config based on what's provided
+        if talking_photo_id:
+            character = {
+                "type": "talking_photo",
+                "talking_photo_id": talking_photo_id
+            }
+        elif avatar_id:
+            character = {
+                "type": "avatar",
+                "avatar_id": avatar_id,
+                "avatar_style": "normal"
+            }
+        else:
+            logger.error("Either avatar_id or talking_photo_id must be provided")
+            return None
+
         payload = {
             "video_inputs": [
                 {
-                    "character": {
-                        "type": "avatar",
-                        "avatar_id": avatar_id,
-                        "avatar_style": "normal"
-                    },
+                    "character": character,
                     "voice": {
                         "type": "text",
                         "voice_id": voice_id,
@@ -207,6 +221,153 @@ class HeyGenAPI:
         except Exception as e:
             logger.error(f"Error downloading video: {str(e)}")
             return False
+
+    async def get_avatars(self) -> Optional[list]:
+        """
+        Get list of available avatars.
+
+        Returns:
+            List of avatars or None
+        """
+        url = f"{self.base_url}/v2/avatars"
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    url,
+                    headers=self.headers,
+                    timeout=aiohttp.ClientTimeout(total=30)
+                ) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        avatars = data.get('data', {}).get('avatars', [])
+                        logger.info(f"Retrieved {len(avatars)} avatars")
+                        return avatars
+                    else:
+                        error_text = await response.text()
+                        logger.error(f"Error getting avatars: {response.status} - {error_text}")
+                        return None
+
+        except Exception as e:
+            logger.error(f"Error getting avatars: {str(e)}")
+            return None
+
+    async def create_talking_photo(self, photo_url: str) -> Optional[str]:
+        """
+        Create a talking photo avatar from an image URL.
+
+        Args:
+            photo_url: URL of the photo to use
+
+        Returns:
+            talking_photo_id if successful, None otherwise
+        """
+        url = f"{self.base_url}/v1/talking_photo"
+
+        payload = {
+            "image_url": photo_url
+        }
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    url,
+                    json=payload,
+                    headers=self.headers,
+                    timeout=aiohttp.ClientTimeout(total=60)
+                ) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        talking_photo_id = data.get('data', {}).get('talking_photo_id')
+                        logger.info(f"Created talking photo: {talking_photo_id}")
+                        return talking_photo_id
+                    else:
+                        error_text = await response.text()
+                        logger.error(f"Error creating talking photo: {response.status} - {error_text}")
+                        return None
+
+        except Exception as e:
+            logger.error(f"Error creating talking photo: {str(e)}")
+            return None
+
+    async def upload_image(self, file_path: str) -> Optional[str]:
+        """
+        Upload an image to HeyGen and get URL.
+
+        Args:
+            file_path: Local path to the image file
+
+        Returns:
+            Image URL if successful, None otherwise
+        """
+        url = "https://upload.heygen.com/v1/asset"
+
+        try:
+            # Read file into memory
+            with open(file_path, 'rb') as f:
+                file_data = f.read()
+
+            async with aiohttp.ClientSession() as session:
+                form = aiohttp.FormData()
+                # Try 'file' field name (standard for file uploads)
+                form.add_field(
+                    'file',
+                    file_data,
+                    filename='photo.jpg',
+                    content_type='image/jpeg'
+                )
+
+                headers = {'X-Api-Key': self.api_key}
+
+                async with session.post(
+                    url,
+                    data=form,
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=60)
+                ) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            image_url = data.get('data', {}).get('url')
+                            logger.info(f"Image uploaded: {image_url}")
+                            return image_url
+                        else:
+                            error_text = await response.text()
+                            logger.error(f"Error uploading image: {response.status} - {error_text}")
+                            return None
+
+        except Exception as e:
+            logger.error(f"Error uploading image: {str(e)}")
+            return None
+
+    async def get_voices(self) -> Optional[list]:
+        """
+        Get list of available voices.
+
+        Returns:
+            List of voices or None
+        """
+        url = f"{self.base_url}/v2/voices"
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    url,
+                    headers=self.headers,
+                    timeout=aiohttp.ClientTimeout(total=30)
+                ) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        voices = data.get('data', {}).get('voices', [])
+                        logger.info(f"Retrieved {len(voices)} voices")
+                        return voices
+                    else:
+                        error_text = await response.text()
+                        logger.error(f"Error getting voices: {response.status} - {error_text}")
+                        return None
+
+        except Exception as e:
+            logger.error(f"Error getting voices: {str(e)}")
+            return None
 
 
 # Global HeyGen API instance

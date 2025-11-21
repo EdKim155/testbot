@@ -16,7 +16,9 @@ from bot.handlers.commands import (
     start_command,
     help_command,
     status_command,
-    cancel_command
+    cancel_command,
+    avatars_command,
+    voices_command
 )
 from bot.handlers.conversation import (
     generate_command,
@@ -48,6 +50,20 @@ async def post_init(application: Application):
     logger.info("Initializing database...")
     await db.init_db()
     logger.info("Database initialized successfully")
+
+    # Set bot commands menu
+    from telegram import BotCommand
+    commands = [
+        BotCommand("start", "Запустить бота"),
+        BotCommand("generate", "Создать видео"),
+        BotCommand("avatars", "Список моих аватаров"),
+        BotCommand("voices", "Список доступных голосов"),
+        BotCommand("status", "Проверить статус генерации"),
+        BotCommand("cancel", "Отменить генерацию"),
+        BotCommand("help", "Показать справку"),
+    ]
+    await application.bot.set_my_commands(commands)
+    logger.info("Bot commands menu set successfully")
 
 
 async def error_handler(update: object, context):
@@ -94,6 +110,8 @@ def main():
         application.add_handler(CommandHandler('help', help_command))
         application.add_handler(CommandHandler('status', status_command))
         application.add_handler(CommandHandler('cancel', cancel_command))
+        application.add_handler(CommandHandler('avatars', avatars_command))
+        application.add_handler(CommandHandler('voices', voices_command))
 
         # Add message handler for regular messages
         application.add_handler(

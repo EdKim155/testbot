@@ -5,6 +5,7 @@ from telegram.ext import ContextTypes
 
 from bot.database.database import db
 from bot.services.video_service import video_service
+from bot.services.heygen_api import heygen_api
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "`avatar_123abc | voice_456def | Привет! Это мой текст.`\n\n"
         "*Доступные команды:*\n"
         "• /generate - создать видео\n"
+        "• /avatars - список доступных аватаров\n"
+        "• /voices - список доступных голосов\n"
         "• /status - проверить статус генерации\n"
         "• /cancel - отменить текущую генерацию\n"
         "• /help - показать эту справку\n\n"
@@ -75,3 +78,105 @@ async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"ℹ️ {message}")
 
     logger.info(f"User {user_id} attempted to cancel task: {success}")
+
+
+async def avatars_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /avatars command - list available avatars."""
+    await update.message.reply_text("🔄 Получаю список ваших кастомных аватаров...")
+
+    avatars = await heygen_api.get_avatars()
+
+    if not avatars:
+        await update.message.reply_text(
+            "❌ Не удалось получить список аватаров. Проверьте API ключ."
+        )
+        return
+
+    if not avatars:
+        await update.message.reply_text(
+            "ℹ️ У вас нет доступных аватаров.\n"
+            "Создайте свой аватар на heygen.com"
+        )
+        return
+
+    # Show all avatars (max 20)
+    message_parts = [f"👥 *Доступные аватары ({len(avatars)}):*\n"]
+
+    for avatar in avatars[:20]:
+        avatar_id = avatar.get('avatar_id', 'N/A')
+        avatar_name = avatar.get('avatar_name', 'Unnamed')
+        is_public = avatar.get('is_public', False)
+        avatar_type = "🌍 Public" if is_public else "🔒 Custom"
+
+        message_parts.append(
+            f"\n• *{avatar_name}* {avatar_type}\n"
+            f"  ID: `{avatar_id}`"
+        )
+
+    if len(avatars) > 20:
+        message_parts.append(f"\n\n_...и еще {len(avatars) - 20} аватаров_")
+
+    await update.message.reply_text(
+        "\n".join(message_parts),
+        parse_mode='Markdown'
+    )
+
+    logger.info(f"User {update.effective_user.id} requested avatars list")
+
+
+async def voices_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /voices command - list available voices."""
+    # Check for language filter
+    args = context.args
+    language_filter = args[0].lower() if args else None
+
+    await update.message.reply_text("🔄 Получаю список доступных голосов...")
+
+    voices = await heygen_api.get_voices()
+
+    if not voices:
+        await update.message.reply_text(
+            "❌ Не удалось получить список голосов. Проверьте API ключ."
+        )
+        return
+
+    # Filter by language if specified
+    if language_filter:
+        voices = [v for v in voices if language_filter in v.get('language', '').lower()]
+
+    if not voices:
+        await update.message.reply_text("ℹ️ Нет доступных голосов.")
+        return
+
+    # Show first 20 voices only
+    display_voices = voices[:20]
+
+    message_parts = [f"🎤 *Доступные голоса ({len(display_voices)} из {len(voices)}):*\n"]
+
+    if language_filter:
+        message_parts[0] = f"🎤 *Голоса ({language_filter}):*\n"
+
+    for voice in display_voices:
+        voice_id = voice.get('voice_id', 'N/A')
+        voice_name = voice.get('name', 'Unnamed')
+        language = voice.get('language', 'N/A')
+
+        message_parts.append(
+            f"\n• *{voice_name}*\n"
+            f"  ID: `{voice_id}`\n"
+            f"  Lang: {language}"
+        )
+
+    if len(voices) > 20:
+        message_parts.append(
+            f"\n\n_...и еще {len(voices) - 20} голосов_\n"
+            f"Используйте /voices <язык> для фильтрации\n"
+            f"Например: /voices russian или /voices english"
+        )
+
+    await update.message.reply_text(
+        "\n".join(message_parts),
+        parse_mode='Markdown'
+    )
+
+    logger.info(f"User {update.effective_user.id} requested voices list")
