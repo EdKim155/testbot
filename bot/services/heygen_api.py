@@ -42,6 +42,7 @@ class HeyGenAPI:
         url = f"{self.base_url}/v2/video/generate"
 
         # Build character config based on what's provided
+        # Simplified structure matching working production app
         if talking_photo_id:
             character = {
                 "type": "talking_photo",
@@ -57,14 +58,19 @@ class HeyGenAPI:
             logger.error("Either avatar_id or talking_photo_id must be provided")
             return None
 
+        # Payload structure matching working production app
+        # No background, no talking_photo_style - just essentials for best quality
         payload = {
+            "test": False,
+            "caption": False,
             "video_inputs": [
                 {
                     "character": character,
                     "voice": {
                         "type": "text",
+                        "input_text": input_text,
                         "voice_id": voice_id,
-                        "input_text": input_text
+                        "speed": 1.0  # Natural speech speed
                     }
                 }
             ],

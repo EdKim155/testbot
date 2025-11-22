@@ -9,6 +9,7 @@ from telegram.ext import (
     ConversationHandler,
     filters
 )
+from telegram.request import HTTPXRequest
 
 from bot.config import Config
 from bot.database.database import db
@@ -70,11 +71,15 @@ async def error_handler(update: object, context):
     """Handle errors in the bot."""
     logger.error(f"Exception while handling an update: {context.error}")
 
-    # Notify user
+    # Notify user - wrapped in try-except to prevent cascading failures
     if isinstance(update, Update) and update.effective_message:
-        await update.effective_message.reply_text(
-            "❌ Произошла ошибка при обработке вашего запроса. Попробуйте позже."
-        )
+        try:
+            await update.effective_message.reply_text(
+                "❌ Произошла ошибка при обработке вашего запроса. Попробуйте позже."
+            )
+        except Exception as e:
+            # If we can't send error message, just log it
+            logger.error(f"Failed to send error message to user: {e}")
 
 
 def main():
@@ -84,10 +89,20 @@ def main():
         Config.validate()
         logger.info("Configuration validated successfully")
 
+        # Configure request with increased timeouts for large file uploads
+        # Video files can be large (HD 1280x720), so we need generous timeouts
+        request = HTTPXRequest(
+            connect_timeout=30.0,
+            read_timeout=120.0,   # 2 minutes for reading
+            write_timeout=300.0,  # 5 minutes for uploading large video files
+            pool_timeout=30.0
+        )
+
         # Create application
         application = (
             Application.builder()
             .token(Config.TELEGRAM_BOT_TOKEN)
+            .request(request)
             .post_init(post_init)
             .build()
         )

@@ -18,18 +18,18 @@ class Config:
     # Database Configuration
     DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite+aiosqlite:///bot.db')
 
-    # Rate Limiting
-    MAX_DAILY_REQUESTS = int(os.getenv('MAX_DAILY_REQUESTS', '5'))
-    MAX_CONCURRENT_TASKS = int(os.getenv('MAX_CONCURRENT_TASKS', '3'))
+    # Rate Limiting (set to very high values to effectively disable limits)
+    MAX_DAILY_REQUESTS = int(os.getenv('MAX_DAILY_REQUESTS', '999999'))  # Unlimited
+    MAX_CONCURRENT_TASKS = int(os.getenv('MAX_CONCURRENT_TASKS', '100'))  # Effectively unlimited
 
     # Video Generation Settings
     VIDEO_CHECK_INTERVAL = int(os.getenv('VIDEO_CHECK_INTERVAL', '15'))  # seconds
     VIDEO_GENERATION_TIMEOUT = int(os.getenv('VIDEO_GENERATION_TIMEOUT', '600'))  # 10 minutes
     MAX_TEXT_LENGTH = int(os.getenv('MAX_TEXT_LENGTH', '2000'))
 
-    # Video Settings
-    VIDEO_WIDTH = int(os.getenv('VIDEO_WIDTH', '1920'))
-    VIDEO_HEIGHT = int(os.getenv('VIDEO_HEIGHT', '1080'))
+    # Video Settings (HD resolution for better quality and faster processing)
+    VIDEO_WIDTH = int(os.getenv('VIDEO_WIDTH', '1280'))   # Horizontal HD (like 720x1280 but horizontal)
+    VIDEO_HEIGHT = int(os.getenv('VIDEO_HEIGHT', '720'))  # 16:9 aspect ratio
 
     # Temporary Files
     TEMP_VIDEO_DIR = os.getenv('TEMP_VIDEO_DIR', './temp_videos')

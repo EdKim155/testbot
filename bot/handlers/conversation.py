@@ -322,24 +322,41 @@ async def generate_video_with_photo(
                     message_id=status_message.message_id
                 )
 
-                with open(video_path, 'rb') as video_file:
-                    await context.bot.send_video(
+                try:
+                    # Use retry logic for sending video with increased retries for large files
+                    async def send_video_with_retry():
+                        with open(video_path, 'rb') as video_file:
+                            return await context.bot.send_video(
+                                chat_id=update.effective_chat.id,
+                                video=video_file,
+                                caption="✅ *Ваше видео готово!*\n\nХотите создать еще одно? Используйте /generate",
+                                parse_mode='Markdown',
+                                read_timeout=120,
+                                write_timeout=300  # 5 minutes for large video upload
+                            )
+
+                    # Retry up to 3 times with longer delays for large files
+                    await retry_with_backoff(send_video_with_retry, max_retries=3, initial_delay=3.0)
+
+                    # Delete status message
+                    await status_message.delete()
+
+                    logger.info(f"Video sent successfully for task {task_id}")
+
+                except Exception as e:
+                    logger.error(f"Failed to send video after retries: {e}")
+                    await context.bot.edit_message_text(
+                        "❌ Не удалось отправить видео из-за проблем с сетью. Попробуйте позже.",
                         chat_id=update.effective_chat.id,
-                        video=video_file,
-                        caption="✅ *Ваше видео готово!*\n\nХотите создать еще одно? Используйте /generate",
-                        parse_mode='Markdown'
+                        message_id=status_message.message_id
                     )
 
-                # Delete status message
-                await status_message.delete()
-
-                # Clean up video file
-                try:
-                    os.remove(video_path)
-                except Exception as e:
-                    logger.error(f"Error deleting video file: {e}")
-
-                logger.info(f"Video sent successfully for task {task_id}")
+                finally:
+                    # Clean up video file
+                    try:
+                        os.remove(video_path)
+                    except Exception as e:
+                        logger.error(f"Error deleting video file: {e}")
             else:
                 await context.bot.edit_message_text(
                     "❌ Не удалось скачать видео. Попробуйте позже.",
@@ -413,24 +430,41 @@ async def generate_video(
                     message_id=status_message.message_id
                 )
 
-                with open(video_path, 'rb') as video_file:
-                    await context.bot.send_video(
+                try:
+                    # Use retry logic for sending video with increased retries for large files
+                    async def send_video_with_retry():
+                        with open(video_path, 'rb') as video_file:
+                            return await context.bot.send_video(
+                                chat_id=update.effective_chat.id,
+                                video=video_file,
+                                caption="✅ *Ваше видео готово!*\n\nХотите создать еще одно? Используйте /generate",
+                                parse_mode='Markdown',
+                                read_timeout=120,
+                                write_timeout=300  # 5 minutes for large video upload
+                            )
+
+                    # Retry up to 3 times with longer delays for large files
+                    await retry_with_backoff(send_video_with_retry, max_retries=3, initial_delay=3.0)
+
+                    # Delete status message
+                    await status_message.delete()
+
+                    logger.info(f"Video sent successfully for task {task_id}")
+
+                except Exception as e:
+                    logger.error(f"Failed to send video after retries: {e}")
+                    await context.bot.edit_message_text(
+                        "❌ Не удалось отправить видео из-за проблем с сетью. Попробуйте позже.",
                         chat_id=update.effective_chat.id,
-                        video=video_file,
-                        caption="✅ *Ваше видео готово!*\n\nХотите создать еще одно? Используйте /generate",
-                        parse_mode='Markdown'
+                        message_id=status_message.message_id
                     )
 
-                # Delete status message
-                await status_message.delete()
-
-                # Clean up video file
-                try:
-                    os.remove(video_path)
-                except Exception as e:
-                    logger.error(f"Error deleting video file: {e}")
-
-                logger.info(f"Video sent successfully for task {task_id}")
+                finally:
+                    # Clean up video file
+                    try:
+                        os.remove(video_path)
+                    except Exception as e:
+                        logger.error(f"Error deleting video file: {e}")
             else:
                 await context.bot.edit_message_text(
                     "❌ Не удалось скачать видео. Попробуйте позже.",
