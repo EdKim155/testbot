@@ -45,8 +45,7 @@ class HeyGenAPI:
         if talking_photo_id:
             character = {
                 "type": "talking_photo",
-                "talking_photo_id": talking_photo_id,
-                "talking_photo_style": "normal"  # Options: normal, circle, square
+                "talking_photo_id": talking_photo_id
             }
         elif avatar_id:
             character = {
@@ -64,26 +63,16 @@ class HeyGenAPI:
                     "character": character,
                     "voice": {
                         "type": "text",
-                        "input_text": input_text,
-                        "voice_id": voice_id
-                    },
-                    "background": {
-                        "type": "color",
-                        "value": "#FFFFFF"
+                        "voice_id": voice_id,
+                        "input_text": input_text
                     }
                 }
             ],
             "dimension": {
                 "width": Config.VIDEO_WIDTH,
                 "height": Config.VIDEO_HEIGHT
-            },
-            "test": False,
-            "caption": False
+            }
         }
-
-        # Log payload for debugging (without sensitive data)
-        logger.info(f"Generating video with payload: character_type={character.get('type')}, voice_id={voice_id}, text_length={len(input_text)}")
-        logger.debug(f"Full payload: {payload}")
 
         try:
             async with aiohttp.ClientSession() as session:
@@ -101,7 +90,6 @@ class HeyGenAPI:
                     else:
                         error_text = await response.text()
                         logger.error(f"HeyGen API error: {response.status} - {error_text}")
-                        logger.error(f"Failed payload: {payload}")
                         return None
 
         except asyncio.TimeoutError:
