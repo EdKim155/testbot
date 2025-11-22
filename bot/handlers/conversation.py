@@ -364,17 +364,20 @@ async def generate_video_with_photo(
                 )
 
                 try:
-                    # Use retry logic for sending video
+                    # Use retry logic for sending video with increased retries for large files
                     async def send_video_with_retry():
                         with open(video_path, 'rb') as video_file:
                             return await context.bot.send_video(
                                 chat_id=update.effective_chat.id,
                                 video=video_file,
                                 caption="✅ *Ваше видео готово!*\n\nХотите создать еще одно? Используйте /generate",
-                                parse_mode='Markdown'
+                                parse_mode='Markdown',
+                                read_timeout=120,
+                                write_timeout=300  # 5 minutes for large video upload
                             )
 
-                    await retry_with_backoff(send_video_with_retry)
+                    # Retry up to 3 times with longer delays for large files
+                    await retry_with_backoff(send_video_with_retry, max_retries=3, initial_delay=3.0)
 
                     # Delete status message
                     await status_message.delete()
@@ -469,17 +472,20 @@ async def generate_video(
                 )
 
                 try:
-                    # Use retry logic for sending video
+                    # Use retry logic for sending video with increased retries for large files
                     async def send_video_with_retry():
                         with open(video_path, 'rb') as video_file:
                             return await context.bot.send_video(
                                 chat_id=update.effective_chat.id,
                                 video=video_file,
                                 caption="✅ *Ваше видео готово!*\n\nХотите создать еще одно? Используйте /generate",
-                                parse_mode='Markdown'
+                                parse_mode='Markdown',
+                                read_timeout=120,
+                                write_timeout=300  # 5 minutes for large video upload
                             )
 
-                    await retry_with_backoff(send_video_with_retry)
+                    # Retry up to 3 times with longer delays for large files
+                    await retry_with_backoff(send_video_with_retry, max_retries=3, initial_delay=3.0)
 
                     # Delete status message
                     await status_message.delete()

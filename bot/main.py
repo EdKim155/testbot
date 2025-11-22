@@ -90,10 +90,11 @@ def main():
         logger.info("Configuration validated successfully")
 
         # Configure request with increased timeouts for large file uploads
+        # Video files can be large (HD 1920x1080), so we need generous timeouts
         request = HTTPXRequest(
             connect_timeout=30.0,
-            read_timeout=60.0,
-            write_timeout=60.0,
+            read_timeout=120.0,   # 2 minutes for reading
+            write_timeout=300.0,  # 5 minutes for uploading large video files
             pool_timeout=30.0
         )
 
