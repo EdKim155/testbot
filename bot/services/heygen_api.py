@@ -80,10 +80,6 @@ class HeyGenAPI:
             }
         }
 
-        # Log payload for debugging (without sensitive data)
-        logger.info(f"Generating video with payload: character_type={character.get('type')}, voice_id={voice_id}, text_length={len(input_text)}")
-        logger.debug(f"Full payload: {payload}")
-
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.post(
@@ -100,7 +96,6 @@ class HeyGenAPI:
                     else:
                         error_text = await response.text()
                         logger.error(f"HeyGen API error: {response.status} - {error_text}")
-                        logger.error(f"Failed payload: {payload}")
                         return None
 
         except asyncio.TimeoutError:
