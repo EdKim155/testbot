@@ -20,6 +20,7 @@ class Config:
 
     # Rate Limiting
     MAX_DAILY_REQUESTS = int(os.getenv('MAX_DAILY_REQUESTS', '5'))
+    MAX_CONCURRENT_TASKS = int(os.getenv('MAX_CONCURRENT_TASKS', '3'))
 
     # Video Generation Settings
     VIDEO_CHECK_INTERVAL = int(os.getenv('VIDEO_CHECK_INTERVAL', '15'))  # seconds

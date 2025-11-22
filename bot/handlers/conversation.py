@@ -51,8 +51,16 @@ async def receive_avatar_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ {error}\n\nПопробуйте снова:")
         return AVATAR_ID
 
-    # Store avatar ID
-    context.user_data['avatar_id'] = message_text
+    # Detect if this is a talking_photo_id (32 hex characters) and add prefix
+    # Talking photo IDs are typically 32 hexadecimal characters without dashes
+    import re
+    if re.match(r'^[0-9a-f]{32}$', message_text):
+        # This looks like a talking_photo_id, add prefix
+        context.user_data['avatar_id'] = f"talking_photo:{message_text}"
+        logger.info(f"Detected talking_photo_id, added prefix: talking_photo:{message_text}")
+    else:
+        # Regular avatar_id
+        context.user_data['avatar_id'] = message_text
 
     await update.message.reply_text(
         "✅ ID аватара принят!\n\n"
@@ -242,6 +250,12 @@ async def process_single_message(
             parse_mode='Markdown'
         )
         return AVATAR_ID
+
+    # Detect if this is a talking_photo_id and add prefix
+    import re
+    if re.match(r'^[0-9a-f]{32}$', avatar_id):
+        avatar_id = f"talking_photo:{avatar_id}"
+        logger.info(f"Detected talking_photo_id in single message, added prefix")
 
     # Show confirmation
     await update.message.reply_text(

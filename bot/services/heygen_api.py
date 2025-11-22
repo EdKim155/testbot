@@ -109,12 +109,14 @@ class HeyGenAPI:
         Returns:
             Dictionary with status information or None
         """
-        url = f"{self.base_url}/v2/video/{video_id}"
+        # Use v1 endpoint as v2 video status endpoint has issues (404)
+        url = f"{self.base_url}/v1/video_status.get"
 
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(
                     url,
+                    params={'video_id': video_id},
                     headers=self.headers,
                     timeout=aiohttp.ClientTimeout(total=30)
                 ) as response:
@@ -222,12 +224,12 @@ class HeyGenAPI:
             logger.error(f"Error downloading video: {str(e)}")
             return False
 
-    async def get_avatars(self) -> Optional[list]:
+    async def get_avatars(self) -> Optional[Dict[str, list]]:
         """
-        Get list of available avatars.
+        Get list of available avatars and talking photos.
 
         Returns:
-            List of avatars or None
+            Dictionary with 'avatars' and 'talking_photos' lists, or None
         """
         url = f"{self.base_url}/v2/avatars"
 
@@ -240,9 +242,14 @@ class HeyGenAPI:
                 ) as response:
                     if response.status == 200:
                         data = await response.json()
-                        avatars = data.get('data', {}).get('avatars', [])
-                        logger.info(f"Retrieved {len(avatars)} avatars")
-                        return avatars
+                        result_data = data.get('data', {})
+                        avatars = result_data.get('avatars', [])
+                        talking_photos = result_data.get('talking_photos', [])
+                        logger.info(f"Retrieved {len(avatars)} avatars and {len(talking_photos)} talking photos")
+                        return {
+                            'avatars': avatars,
+                            'talking_photos': talking_photos
+                        }
                     else:
                         error_text = await response.text()
                         logger.error(f"Error getting avatars: {response.status} - {error_text}")
@@ -367,6 +374,69 @@ class HeyGenAPI:
 
         except Exception as e:
             logger.error(f"Error getting voices: {str(e)}")
+            return None
+
+    async def get_avatar_groups(self) -> Optional[list]:
+        """
+        Get list of available avatar groups (for photo avatars/instant avatars).
+
+        Returns:
+            List of avatar groups or None
+        """
+        url = f"{self.base_url}/v2/avatar_groups"
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    url,
+                    headers=self.headers,
+                    timeout=aiohttp.ClientTimeout(total=30)
+                ) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        groups = data.get('data', {}).get('avatar_groups', [])
+                        logger.info(f"Retrieved {len(groups)} avatar groups")
+                        return groups
+                    else:
+                        error_text = await response.text()
+                        logger.error(f"Error getting avatar groups: {response.status} - {error_text}")
+                        return None
+
+        except Exception as e:
+            logger.error(f"Error getting avatar groups: {str(e)}")
+            return None
+
+    async def get_avatars_in_group(self, group_id: str) -> Optional[list]:
+        """
+        Get list of avatars in a specific avatar group.
+
+        Args:
+            group_id: Avatar group ID
+
+        Returns:
+            List of avatars in the group or None
+        """
+        url = f"{self.base_url}/v2/avatar_groups/{group_id}/avatars"
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    url,
+                    headers=self.headers,
+                    timeout=aiohttp.ClientTimeout(total=30)
+                ) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        avatars = data.get('data', {}).get('avatars', [])
+                        logger.info(f"Retrieved {len(avatars)} avatars in group {group_id}")
+                        return avatars
+                    else:
+                        error_text = await response.text()
+                        logger.error(f"Error getting avatars in group: {response.status} - {error_text}")
+                        return None
+
+        except Exception as e:
+            logger.error(f"Error getting avatars in group: {str(e)}")
             return None
 
 

@@ -24,10 +24,10 @@ class VideoService:
         Returns:
             Tuple of (can_generate, error_message)
         """
-        # Check if user has active task
-        active_task = await db.get_user_active_task(user_id)
-        if active_task:
-            return False, "У вас уже есть активная задача генерации видео. Используйте /status для проверки статуса или /cancel для отмены."
+        # Check if user has reached concurrent tasks limit
+        active_tasks_count = await db.get_user_active_tasks_count(user_id)
+        if active_tasks_count >= Config.MAX_CONCURRENT_TASKS:
+            return False, f"У вас уже {active_tasks_count} активных задач (максимум {Config.MAX_CONCURRENT_TASKS}). Дождитесь завершения или используйте /cancel."
 
         # Check daily limit
         daily_requests = await db.get_user_daily_requests(user_id)
@@ -203,33 +203,54 @@ class VideoService:
         else:
             return None
 
-    async def cancel_task(self, user_id: int) -> tuple[bool, str]:
+    async def cancel_task(self, user_id: int, task_id: Optional[int] = None) -> tuple[bool, str]:
         """
-        Cancel user's active task.
+        Cancel user's active task(s).
 
         Args:
             user_id: Telegram user ID
+            task_id: Optional specific task ID to cancel. If None, cancels all active tasks.
 
         Returns:
             Tuple of (success, message)
         """
-        active_task = await db.get_user_active_task(user_id)
+        if task_id:
+            # Cancel specific task
+            task = await db.get_task_by_id(task_id)
+            if not task or task.user_id != user_id:
+                return False, "Задача не найдена."
 
-        if not active_task:
-            return False, "У вас нет активной задачи для отмены."
+            if task.status not in ['pending', 'processing']:
+                return False, "Эта задача уже завершена или отменена."
 
-        await db.update_task_status(
-            active_task.task_id,
-            'failed',
-            error_message='Отменено пользователем'
-        )
+            await db.update_task_status(
+                task_id,
+                'failed',
+                error_message='Отменено пользователем'
+            )
+            logger.info(f"Task {task_id} cancelled by user {user_id}")
+            return True, f"Задача #{task_id} отменена."
 
-        logger.info(f"Task {active_task.task_id} cancelled by user {user_id}")
-        return True, "Задача генерации видео отменена."
+        else:
+            # Cancel all active tasks
+            active_tasks = await db.get_user_active_tasks(user_id)
+
+            if not active_tasks:
+                return False, "У вас нет активных задач для отмены."
+
+            for task in active_tasks:
+                await db.update_task_status(
+                    task.task_id,
+                    'failed',
+                    error_message='Отменено пользователем'
+                )
+
+            logger.info(f"{len(active_tasks)} tasks cancelled by user {user_id}")
+            return True, f"Отменено задач: {len(active_tasks)}."
 
     async def get_task_status_message(self, user_id: int) -> str:
         """
-        Get status message for user's active task.
+        Get status message for user's active tasks.
 
         Args:
             user_id: Telegram user ID
@@ -237,19 +258,26 @@ class VideoService:
         Returns:
             Status message
         """
-        active_task = await db.get_user_active_task(user_id)
+        active_tasks = await db.get_user_active_tasks(user_id)
 
-        if not active_task:
+        if not active_tasks:
             return "У вас нет активных задач генерации видео."
 
-        if active_task.status == 'pending':
-            return "⏳ Ваша задача находится в очереди..."
+        message_parts = [f"📊 *Активные задачи ({len(active_tasks)}):*\n"]
 
-        elif active_task.status == 'processing':
-            return "⚙️ Ваше видео генерируется. Это может занять 2-5 минут..."
+        for i, task in enumerate(active_tasks, 1):
+            status_emoji = "⏳" if task.status == 'pending' else "⚙️"
+            status_text = "в очереди" if task.status == 'pending' else "генерируется"
 
-        else:
-            return "У вас нет активных задач генерации видео."
+            # Truncate text for display
+            text_preview = task.input_text[:50] + "..." if len(task.input_text) > 50 else task.input_text
+
+            message_parts.append(
+                f"{i}. {status_emoji} Задача #{task.task_id} - {status_text}\n"
+                f"   Текст: {text_preview}\n"
+            )
+
+        return "\n".join(message_parts)
 
 
 # Global video service instance

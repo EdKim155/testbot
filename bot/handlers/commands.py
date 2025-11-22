@@ -61,7 +61,7 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
     status_message = await video_service.get_task_status_message(user_id)
-    await update.message.reply_text(status_message)
+    await update.message.reply_text(status_message, parse_mode='Markdown')
 
 
 async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -82,46 +82,76 @@ async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def avatars_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /avatars command - list available avatars."""
-    await update.message.reply_text("🔄 Получаю список ваших кастомных аватаров...")
+    await update.message.reply_text("🔄 Получаю список ваших аватаров...")
 
-    avatars = await heygen_api.get_avatars()
+    # Get avatars and talking photos
+    result = await heygen_api.get_avatars()
 
-    if not avatars:
+    if not result:
         await update.message.reply_text(
             "❌ Не удалось получить список аватаров. Проверьте API ключ."
         )
         return
 
-    if not avatars:
+    avatars = result.get('avatars', [])
+    talking_photos = result.get('talking_photos', [])
+
+    # Filter to show only custom/private avatars and talking photos
+    custom_avatars = [a for a in avatars if not a.get('is_public', False)]
+    public_avatars = [a for a in avatars if a.get('is_public', False)]
+
+    if not custom_avatars and not talking_photos:
         await update.message.reply_text(
-            "ℹ️ У вас нет доступных аватаров.\n"
-            "Создайте свой аватар на heygen.com"
+            "ℹ️ У вас нет своих кастомных аватаров.\n\n"
+            "📸 *Как создать свой аватар:*\n"
+            "1. Зайдите на heygen.com\n"
+            "2. Создайте Instant Avatar из фото\n"
+            "3. Или отправьте фото боту через /generate\n\n"
+            f"💡 Доступно публичных аватаров: {len(public_avatars)}\n"
+            "Используйте их ID для генерации видео.",
+            parse_mode='Markdown'
         )
         return
 
-    # Show all avatars (max 20)
-    message_parts = [f"👥 *Доступные аватары ({len(avatars)}):*\n"]
+    # Build message with custom avatars and talking photos first
+    message_parts = []
 
-    for avatar in avatars[:20]:
-        avatar_id = avatar.get('avatar_id', 'N/A')
-        avatar_name = avatar.get('avatar_name', 'Unnamed')
-        is_public = avatar.get('is_public', False)
-        avatar_type = "🌍 Public" if is_public else "🔒 Custom"
+    # Show talking photos (YOUR photos!)
+    if talking_photos:
+        message_parts.append(f"📸 *ВАШИ ФОТО-АВАТАРЫ ({len(talking_photos)}):*\n")
+        for photo in talking_photos[:20]:
+            photo_id = photo.get('talking_photo_id', 'N/A')
+            photo_name = photo.get('talking_photo_name', 'Unnamed')
+            message_parts.append(
+                f"\n• *{photo_name}*\n"
+                f"  ID: `{photo_id}`"
+            )
 
-        message_parts.append(
-            f"\n• *{avatar_name}* {avatar_type}\n"
-            f"  ID: `{avatar_id}`"
-        )
+    # Show custom avatars
+    if custom_avatars:
+        message_parts.append(f"\n\n🔒 *КАСТОМНЫЕ АВАТАРЫ ({len(custom_avatars)}):*\n")
+        for avatar in custom_avatars[:20]:
+            avatar_id = avatar.get('avatar_id', 'N/A')
+            avatar_name = avatar.get('avatar_name', 'Unnamed')
+            message_parts.append(
+                f"\n• *{avatar_name}*\n"
+                f"  ID: `{avatar_id}`"
+            )
 
-    if len(avatars) > 20:
-        message_parts.append(f"\n\n_...и еще {len(avatars) - 20} аватаров_")
+    # Add info about public avatars
+    message_parts.append(f"\n\n_Также доступно {len(public_avatars)} публичных аватаров_")
 
     await update.message.reply_text(
         "\n".join(message_parts),
         parse_mode='Markdown'
     )
 
-    logger.info(f"User {update.effective_user.id} requested avatars list")
+    logger.info(
+        f"User {update.effective_user.id} requested avatars: "
+        f"{len(talking_photos)} talking photos, "
+        f"{len(custom_avatars)} custom avatars, "
+        f"{len(public_avatars)} public avatars"
+    )
 
 
 async def voices_command(update: Update, context: ContextTypes.DEFAULT_TYPE):

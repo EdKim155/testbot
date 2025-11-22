@@ -104,6 +104,27 @@ class Database:
             )
             return result.scalar_one_or_none()
 
+    async def get_user_active_tasks_count(self, user_id: int) -> int:
+        """Get count of user's active (pending or processing) tasks."""
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(func.count(VideoTask.task_id))
+                .where(VideoTask.user_id == user_id)
+                .where(VideoTask.status.in_(['pending', 'processing']))
+            )
+            return result.scalar() or 0
+
+    async def get_user_active_tasks(self, user_id: int) -> list[VideoTask]:
+        """Get all user's active (pending or processing) tasks."""
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(VideoTask)
+                .where(VideoTask.user_id == user_id)
+                .where(VideoTask.status.in_(['pending', 'processing']))
+                .order_by(VideoTask.created_at.desc())
+            )
+            return list(result.scalars().all())
+
     async def get_user_daily_requests(self, user_id: int) -> int:
         """Get number of user's requests today."""
         async with self.async_session() as session:
